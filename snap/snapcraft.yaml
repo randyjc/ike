@@ -1,6 +1,6 @@
-name: ike-qt
+name: ike-qt-core18
 version: '2.2.1'
-summary: The Shewsoft VPN Manager
+summary: The Shewsoft VPN Manager (working version)
 description: |
  The Shrew Soft VPN Client is a free IPsec VPN Client for FreeBSD, NetBSD,
  Linux and Windows operating systems. This product can be used to communicate
@@ -12,9 +12,29 @@ description: |
 
 grade: stable
 confinement: strict
-
+base: core18
 architectures:
   - build-on: amd64
+    run-on: amd64
+
+  - build-on: i386
+    run-on: i386
+
+  - build-on: armhf
+    run-on: armhf
+
+  - build-on: arm64
+    run-on: arm64
+
+plugs:
+  resolv-conf:
+    interface: system-files
+    read:
+    - /etc/resolv.conf
+    - /etc/resolv.iked
+    write:
+    - /etc/resolv.conf
+    - /etc/resolv.iked
 
 apps:
   ikec:
@@ -24,49 +44,41 @@ apps:
     plugs:
       - desktop
       - desktop-legacy
-      - wayland
-      - home
       - network
       - network-bind
       - network-control
       - netlink-connector
   iked:
-    daemon: simple
+    daemon: forking
     command: usr/sbin/iked
     environment:
       LD_LIBRARY_PATH: $LD_LIBRARY_PATH:$SNAP/usr/lib/x86_64-linux-gnu/ike:$PATH
     plugs:
-      - desktop
-      - desktop-legacy
-      - wayland
-      - home
       - network
       - network-bind
       - network-control
       - netlink-connector
+      - resolv-conf
   qikea:
-    command: usr/bin/qikea
+    command: desktop-launch qikea
     environment:
       LD_LIBRARY_PATH: $LD_LIBRARY_PATH:$SNAP/usr/lib/x86_64-linux-gnu/ike:$PATH
     plugs:
+      - home
       - desktop
       - desktop-legacy
-      - wayland
-      - home
       - network
       - network-bind
       - network-control
       - netlink-connector
       - x11
   qikec:
-    command: usr/bin/qikec
+    command: desktop-launch qikec
     environment:
       LD_LIBRARY_PATH: $LD_LIBRARY_PATH:$SNAP/usr/lib/x86_64-linux-gnu/ike:$PATH
     plugs:
       - desktop
       - desktop-legacy
-      - wayland
-      - home
       - network
       - network-bind
       - network-control
@@ -74,13 +86,50 @@ apps:
       - x11
 
 parts:
+  desktop-qt4:
+    plugin: make
+    build-packages:
+        - libqt4-dev
+        - dpkg-dev
+    source: https://github.com/ubuntu/snapcraft-desktop-helpers.git
+    make-parameters:
+        - FLAVOR=qt4
+    source-subdir: qt
   ike:
-    source: http://ftp.osuosl.org/pub/ubuntu/pool/universe/i/ike/ike-qtgui_2.2.1+dfsg-2ubuntu1_amd64.deb
-    source-type: deb
-    plugin: dump
+    source: https://www.shrew.net/download/ike/ike-2.2.1-release.tgz
+    source-type: tar
+    plugin: cmake
+    configflags: [ "-DQTGUI=YES", "-DNATT=YES" ]
+    override-pull: |
+      snapcraftctl pull
+      dos2unix source/libike/manager.file.cpp
+      dos2unix source/iked/ike.exch.config.cpp
+      dos2unix source/iked/ike.names.cpp
+      dos2unix source/iked/ike.xconf.cpp
+      dos2unix source/libike/libike.h
+      dos2unix source/iked/iked.cpp
+      dos2unix source/libike/manager.cpp
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/fix_readdir
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/paths
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/out-of-tree
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/spelling
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/underlinkage
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/socket_path
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/iked_snap_env
+      patch -p1 < $SNAPCRAFT_PROJECT_DIR/patches/manager_snap_env
+    override-prime: |
+      snapcraftctl prime
+      cp $SNAPCRAFT_PRIME/etc/iked.conf.sample $SNAPCRAFT_PRIME/etc/iked.conf
+    build-packages:
+      - g++
+      - cmake
+      - libqt4-dev
+      - libssl1.0-dev
+      - libedit-dev
+      - flex
+      - bison
+      - dos2unix
     stage-packages:
-      - ike
-      - ike-qtgui
       - ipsec-tools
       - libmng2
       - libmysqlclient20
@@ -100,3 +149,6 @@ parts:
       - qt-at-spi
       - qtchooser
       - qtcore4-l10n
+      - libssl1.0.0
+      - libedit2
+    after: [ desktop-qt4 ]
